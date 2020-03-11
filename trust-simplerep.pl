@@ -6,8 +6,11 @@ use warnings ;
 die "Usage: ./trust-simplerep.pl xxx_cdr3.out [OPTIONS] > trust_report.out\n". 
 	"OPTIONS:\n".
 	"\t--decimalCnt: the count column uses decimal instead of truncated integer. (default: not used)\n".
+	"\t--barcodeCnt: the count column is the number of barcode instead of read support. (default: not used)\n".
 	"\t--junction trust_annot.fa: output junction information for the CDR3 (default: not used)\n".
-	"\t--filterTcrError FLOAT: filter TCR CDR3s less than the fraction of representative CDR3 in the consensus. (default: 0.05)\n"
+	"\t--noPartial: do not including partial CDR3 in report. (default: include partial)\n".
+	"\t--filterTcrError FLOAT: filter TCR CDR3s less than the fraction of representative CDR3 in the consensus. (default: 0.05)\n".
+	"\t--filterBcrError FLOAT: filter BCR CDR3s less than the fraction of representative CDR3 in the consensus. (default: 0)\n"
 	if ( @ARGV == 0 ) ;
 
 my %cdr3 ;  
@@ -144,6 +147,7 @@ sub InferConstantGene
 	
 	if ($_[2] ne "*")
 	{
+		$ret = (split /\*/, $ret)[0] ; # Remove the allele id from c gene
 		for ( $i = 0 ; $i <= 1 ; ++$i )
 		{
 			next if ( $_[$i] eq "*" ) ;
@@ -156,8 +160,14 @@ sub InferConstantGene
 		
 		return $ret ;
 	}
-	
-	for ( $i = 0 ; $i <= 1 ; ++$i )
+		
+	# For TRA and TRD gene, we don't infer its constant gene.
+	if ($_[0] =~ /^TR[AD]/ || $_[1] eq "*")
+	{
+		return $ret ;
+	}
+
+	for ( $i = 1 ; $i >= 0 ; --$i )
 	{
 		next if ( $_[$i] eq "*" ) ;
 		if ( $_[$i] =~ /^IGH/ )
@@ -175,7 +185,10 @@ my $i ;
 my $annotFile = "" ;
 my $reportJunctionInfo = 0 ;
 my $tcrErrorFilter = 0.05 ;
+my $bcrErrorFilter = 0 ;
 my $roundDownCount = 1 ;
+my $useBarcodeCnt = 0 ;
+my $reportPartial = 1 ;
 for ( $i = 1 ; $i < @ARGV ; ++$i )
 {
 	if ( $ARGV[$i] eq "--junction" )
@@ -189,9 +202,22 @@ for ( $i = 1 ; $i < @ARGV ; ++$i )
 		$tcrErrorFilter = $ARGV[$i + 1] ;
 		++$i ;
 	}
+	elsif ( $ARGV[$i] eq "--filterBcrError" )
+	{
+		$bcrErrorFilter = $ARGV[$i + 1] ;
+		++$i ;
+	}
 	elsif ( $ARGV[$i] eq "--decimalCnt" )
 	{
 		$roundDownCount = 0 ;
+	}
+	elsif ( $ARGV[$i] eq "--barcodeCnt" )
+	{
+		$useBarcodeCnt = 1 ;
+	}
+	elsif ( $ARGV[$i] eq "--noPartial" )
+	{
+		$reportPartial = 0 ;
 	}
 	else
 	{
@@ -312,10 +338,13 @@ close FP1 ;
 open FP1, $ARGV[0] ;
 my @totalCnt = (0, 0, 0) ;
 my %cdr3AssemblyId ; # Record which assembly is representative for the cdr3
+my %cdr3Barcode ; # record whether a "chain_cdr3_barcode" has showed up before or not 
 while ( <FP1> )
 {
 	chomp ;
 	my @cols = split ;
+	next if ( $reportPartial == 0 && $cols[9] == 0 ) ;
+	
 	my $assemblyId = $cols[0] ;
 	my $vgene = (split /,/, $cols[2])[0] ;
 	my $dgene = (split /,/, $cols[3])[0] ;
@@ -326,11 +355,37 @@ while ( <FP1> )
 	my $key = join( "\t", ( $vgene, $dgene, $jgene, $cgene, $cols[8] ) ) ;
 	my $type = GetChainType( $vgene, $jgene, $cgene ) ;
 	
-	if ($type == 2) # TCR
+	if ($type == 2) # TCR, ignore the low abundance 
 	{
 		if ($cols[10] < $assemblyMostReads{$assemblyId} * $tcrErrorFilter ) 
 		{
 			next ;
+		}
+	}
+	elsif ( $type < 2 ) # BCR
+	{
+		if ($cols[10] < $assemblyMostReads{$assemblyId} * $bcrErrorFilter ) 
+		{
+			next ;
+		}
+	}
+	
+	# Ignore the CDR3 that is too long, could be from mis-annotation.
+	next if (length($cols[8]) >= 180 ) ;
+
+	if ( $useBarcodeCnt )
+	{
+		my @cols2 = split/_/, $assemblyId ;
+		my $barcode = join( "_", @cols2[0..scalar(@cols2)-2] ) ;
+		my $tmp = $type."_".$cols[8]."_".$barcode ;
+		if ( defined $cdr3Barcode{$tmp} )
+		{
+			next ;
+		}
+		else
+		{
+			$cdr3Barcode{$tmp} = 1 ;
+			$cols[10] = 1 ;
 		}
 	}
 
