@@ -24,6 +24,8 @@ You will find the executable files in the downloaded directory. If you want to r
 
 The provided executables are compiled in GCC v7.3.0.
 
+2. We also provide the [Singularity](https://sylabs.io/singularity/) container at https://github.com/liulab-dfci/TRUST4/releases. 
+
 ### Usage
 
 	Usage: ./run-trust4 [OPTIONS]
@@ -45,6 +47,10 @@ The provided executables are compiled in GCC v7.3.0.
 				1: start from assembly
 				2: start from annotation
 				3: start from generating the report table
+				
+with Singularity container, you just need to run TRUST4 with:
+	
+	singularity exec ../trust4-singularity.sif /TRUST4/run-trust4
 
 ### Input/Output
 
