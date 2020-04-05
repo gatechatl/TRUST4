@@ -50,7 +50,7 @@ The provided executables are compiled in GCC v7.3.0.
 				
 with Singularity container, you just need to run TRUST4 with:
 	
-	singularity exec ../trust4-singularity.sif /TRUST4/run-trust4
+	singularity exec trust4-singularity.sif /TRUST4/run-trust4
 
 ### Input/Output
 
